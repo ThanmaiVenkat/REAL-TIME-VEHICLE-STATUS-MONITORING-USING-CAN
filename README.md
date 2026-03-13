@@ -1,124 +1,188 @@
-# REAL-TIME-VEHICLE-STATUS-MONITORING-USING-CAN
+# 🏎️ Real Time Vehicle Status Monitoring Using CAN
 
-> A real-time multi-node vehicle status monitoring built from scratch on bare-metal ARM7 microcontrollers — no RTOS, no HAL, just pure embedded C.
-
----
-
-## 🌟 What This Project Does
-
-This system simulates a vehicle's dashboard electronics using **4 independent MCU nodes** communicating over a **CAN bus** — the same protocol used in real cars (ISO 11898).
-
-The central display node renders a live dashboard on a **20×4 character LCD**, showing:
-- ⛽ Real-time fuel level as an animated bar + percentage
-- 🔁 Left / right turn indicator arrows that blink
-- 💥 Airbag deployment detection using a 3-axis accelerometer
+> An embedded systems project that enhances **vehicle safety and monitoring** using the **Controller Area Network (CAN) protocol** — built on bare-metal LPC2129 ARM7 microcontrollers with no RTOS, no HAL, just pure Embedded C.
 
 ---
 
-## 🎥 Dashboard Preview
+## 🎯 Aim
+
+The aim of this project is to enhance vehicle safety and monitoring by using the **Controller Area Network (CAN) protocol**. The system is designed to display critical vehicle parameters such as:
+
+- ⛽ **Fuel percentage** — read from an ADC-connected fuel gauge sensor
+- 🔁 **Indicator status** — left / right turn signal control via CAN
+- 💥 **Airbag status / activation** — impact detection using an accelerometer
+
+All of this is displayed in **real time** on a 20×4 LCD.
+
+---
+
+## 🧠 Insight — What You Need to Know
+
+- 📝 Knowledge of **Embedded-C programming**
+- 🔬 Thorough understanding of **LPC2129 Architecture** — GPIO, ADC, Interrupts, and CAN interface
+- 📡 Understanding of the **CAN protocol** (Controller Area Network, ISO 11898)
+
+---
+
+## 🏗️ Block Diagram
+
+```
+                    ┌──────────────────────────────────────────┐
+                    │               🖥️  MAIN NODE              |
+                    │                                          │
+                    │  ┌──────────────────┐   ──────────►  LCD │
+                    │  │  ON-CHIP CAN     │   ──────────►  BUZZER/LED
+                    │  │  CONTROLLER      │   ◄────────►  MMA7660
+                    │  │    LPC2129       │   ◄──  L.I SW (EINT0)
+          MCP2551 ◄─┤  └──────────────────┘   ◄──  R.I SW (EINT2)
+                    └───────────┬──────────────────────────────┘
+                                │                    
+          ══════════════════════╪══════════════════════ CAN BUS
+               CANH / CANL      │          CANH / CANL
+          ══════════════════════╪══════════════════════
+                    ┌───────────┴────────┐    ┌────────────────────────┐
+                    │  💡 INDICATOR NODE │    │     ⛽ FUEL NODE       │
+                    │                   │    │                        │
+                    │  ON-CHIP CAN      │    │  ON-CHIP CAN           │
+                    │  CONTROLLER       │    │  CONTROLLER            │
+                    │  LPC2129          │    │  LPC2129               │
+                    │  MCP2551          │    │  MCP2551               │
+                    │       │           │    │       │                │
+                    │  8 LEDs(Indicator)│    │ADC(P0.28) ◄── FUEL GAUGE│
+                    └───────────────────┘    └────────────────────────┘
+
+  LEFT  INDICATION: LEDs scroll one by one from RIGHT to LEFT
+  RIGHT INDICATION: LEDs scroll one by one from LEFT  to RIGHT
+```
+
+---
+
+## 🔧 Hardware Requirements
+
+| # | Component | Purpose |
+|---|---|---|
+| 1 | **LPC2129** | ARM7TDMI-S MCU — main processing unit for all 3 nodes |
+| 2 | **MCP2551** | CAN transceiver — interfaces MCU to CAN bus (CANH/CANL) |
+| 3 | **LEDs (×8)** | Indicator node — visual turn-signal sweep animation |
+| 4 | **LCD (20×4)** | Main node — real-time dashboard display |
+| 5 | **MMA7660** | 3-axis accelerometer — airbag impact detection via I2C |
+| 6 | **Fuel Gauge** | Resistive sensor — read via on-chip ADC (AIN1) |
+| 7 | **Switches (×2)** | L.I SW / R.I SW — trigger EINT0 / EINT2 interrupts |
+| 8 | **USB to UART Converter** | Flash firmware and debug via serial port |
+
+---
+
+## 💻 Software Requirements
+
+| Tool | Purpose |
+|---|---|
+| **Embedded C** | Programming language for all firmware |
+| **Keil µVision** | IDE and ARM compiler for LPC2129 |
+| **Flash Magic** | Firmware flashing tool over UART/USB |
+
+---
+
+## 📡 CAN Message Protocol
+
+| CAN ID | Node | Byte | Value | Meaning |
+|:---:|---|:---:|:---:|---|
+| `0x01` | Main Node → Indicator Node | DATA1 | `0x01` | ◄ Left  indicator triggered |
+| `0x01` | Main Node → Indicator Node | DATA1 | `0x02` | ► Right indicator triggered |
+| `0x02` | Fuel Node → Main Node | DATA2 | `0–100` | ⛽ Fuel level percentage |
+
+---
+
+## 🎥 LCD Dashboard Layout (20×4)
 
 ```
      ┌────────────────────┐
-L1   │  VEHICLE DASHBOARD │
-L2   │FUEL [████████░░]75%│  ← live fuel bar
-L3   │IND  <<<   ◆   >>> │  ← indicator blink
-L4   │AIRBAG  STATUS: OK! │  ← airbag monitor
+L1   │  VEHICLE DASHBOARD │   ← static title
+L2   │FUEL [████████░░]75%│   ← real-time fuel bar + percentage
+L3   │IND  <<<   ◆   >>> │   ← indicator arrows (blink on press)
+L4   │AIRBAG  STATUS: OK! │   ← airbag: OK / BOOM on impact
      └────────────────────┘
-        JHD 204A  20×4 LCD
 ```
 
 ---
 
-## 🏗️ System Architecture
+## 🔄 Node Descriptions
+
+### 🖥️ Main Node (`MAIN_CAN_TX.c`)
+- Continuously reads **MMA7660 accelerometer** data over I2C
+- Displays real-time X / Y / Z acceleration values on LCD
+- Analyses acceleration against a **predefined safety threshold**
+- If threshold exceeded → identifies as **accident event** → displays airbag deployed message
+- When **SW1 / SW2** are pressed (via EINT0 / EINT2 external interrupts) → sends indicator control signal to Indicator Node via CAN
+- Receives **fuel percentage** from Fuel Node via CAN and displays it on LCD
+
+> ⚠️ SW1 and SW2 must be handled using **external interrupts** (not polling)
+
+### 💡 Indicator Node (`MAIN_CAN_RX.c`)
+- Continuously **waits for data** from Main Node on the CAN bus
+- On receiving a frame with ID=1:
+  - `DATA1 = 0x01` → Left  indication: LEDs scroll **right to left** one by one
+  - `DATA1 = 0x02` → Right indication: LEDs scroll **left to right** one by one
+- Uses 8 LEDs on P0.0–P0.7 for the sweep animation
+
+### ⛽ Fuel Node (`FUEL_MAIN.c`)
+- Continuously reads the **fuel gauge sensor** using the on-chip ADC
+- Converts raw 10-bit ADC value (0–1023) to a percentage (0–100%)
+- Sends the fuel percentage to the Main Node via CAN every **300 ms**
+
+---
+
+## 📋 Implementation Sequence
+
+Follow these steps in order when building and testing the project:
 
 ```
-                        ┌─────────────────────────────────┐
-  ⛽ FUEL NODE          │           🖥️  MAIN NODE          |
-  ┌──────────────┐      │        (MAIN_CAN_TX.c)          │
-  │ FUEL_MAIN.c  │      │                                 │
-  │              │      │  • Right/Left Button press      │
-  │ ADC sensor   │─────►│  • Drives 20×4 LCD dashboard    │
-  │ → % value    │      │  • Monitors accelerometer       │
-  │ every 300ms  │      │  • Controls airbag output       │
-  └──────────────┘      └───────────────┬─────────────────┘
-                                        │
-                                        │ CAN Bus
-                                        │ (125 kbps)
-                                        ▼
-                          ┌─────────────────────────┐
-                          │   💡 INDICATOR RX NODE  │
-                          │     (MAIN_CAN_RX.c)     │
-                          │  8-LED sweep animation  │
-                          └─────────────────────────┘
+Step 1  ✅  Create a new project folder and name it appropriately
+Step 2  ✅  Test LCD — display character, string, and integer constants
+Step 3  ✅  Test on-chip ADC — connect potentiometer, display value on LCD
+Step 4  ✅  Develop fuel percentage logic — read ADC, show % on LCD
+Step 5  ✅  Test external interrupts — count presses, display count on LCD
+Step 6  ✅  Read accelerometer (MMA7660) via I2C — display X/Y/Z on LCD
+Step 7  ✅  Download and test CAN basic code — verify TX/RX on hardware
+Step 8  ✅  Integrate all modules — build full Main, Indicator, Fuel nodes
 ```
 
 ---
 
-## ✨ Key Features
-
-| Feature | Details |
-|---|---|
-| 🔌 **Multi-node CAN bus** | 4 MCUs on a shared 125 kbps CAN network |
-| ⛽ **Real-time fuel gauge** | 10-segment animated bar updates every 300 ms |
-| 🔁 **Turn indicators** | Blinking arrow animation with toggle logic |
-| 💥 **Airbag detection** | 3-axis accelerometer threshold detection (±1.2g) |
-| 🖥️ **Custom LCD characters** | 8 CGRAM characters: arrows, blocks, diamond, border |
-| ⚡ **Interrupt-driven buttons** | EINT0/EINT2 with VIC for zero-latency response |
-| 🛠️ **Zero dependencies** | No RTOS, no HAL — every driver written from scratch |
-
----
-
-## 🧠 Skills Demonstrated
-
-```
-Embedded C           ████████████████████  Expert
-CAN Bus Protocol     ████████████████░░░░  Strong
-I2C Communication    ███████████████░░░░░  Strong
-ADC / Sensors        ██████████████░░░░░░  Strong
-Interrupt Handling   ████████████████░░░░  Strong
-LCD Driver (HD44780) ████████████████████  Expert
-Bit Manipulation     ████████████████████  Expert
-Hardware Debugging   ███████████████░░░░░  Strong
-```
-
----
-
-## 🗂️ Project Structure
+## 🗂️ File Structure
 
 ```
 vehicle-dashboard/
 │
 ├── 📡 CAN Driver
 │   ├── CAN.c              # init, TX (blocking + timeout), RX (non-blocking)
-│   ├── can.h              # CANF frame struct, function prototypes
+│   ├── can.h              # CANF frame struct + function prototypes
 │   └── can_defines.h      # BTR timing macros (BRP, TSEG1, TSEG2, SJW)
 │
 ├── ⛽ Fuel Node
-│   ├── FUEL_MAIN.c        # main: ADC read → CAN transmit loop
+│   ├── FUEL_MAIN.c        # main: ADC read → CAN transmit every 300 ms
 │   ├── FUEL.c             # ADC init + single-shot blocking conversion
 │   ├── fuel.h             # ADC interface
 │   └── fuel_defnes.h      # ADC clock, pin, and result bit macros
 │
 ├── 🔗 I2C Driver
-│   ├── I2C.c              # start/restart/stop/write/nack/mack
+│   ├── I2C.c              # start / restart / stop / write / read
 │   ├── i2c.h              # I2C interface
 │   └── i2c_defines.h      # 100 kHz divider, pin and bit macros
 │
-├── 📐 Accelerometer (MMA7660FC)
-│   ├── MMA_7660.c         # read/write registers, sign-extend 6-bit data
-│   ├── mma_7660.h         # register map, I2C addresses, prototypes
-│   └── MAIN_MMA_7660.c    # airbag_trigger() — impact detection logic
+├── 📐 Accelerometer (MMA7660)
+│   ├── MMA_7660.c         # register read/write, 6-bit sign-extension
+│   ├── mma_7660.h         # register map, I2C address, prototypes
+│   └── MAIN_MMA_7660.c    # airbag_trigger() — threshold impact detection
 │
 ├── 🖥️ LCD Driver (JHD 204A 20×4)
-│   ├── LCD.c              # full HD44780 driver + CGRAM custom chars
-│   ├── lcd.h              # LCD interface (str, int, float, hex, CGRAM)
+│   ├── LCD.c              # HD44780 init + CGRAM custom characters
+│   ├── lcd.h              # lcd_str / lcd_int / lcd_char / lcd_cmd
 │   └── lcd_defines.h      # pin map, DDRAM line addresses
 │
 ├── 🔁 Indicator System
 │   ├── INDICATOR.c        # 8-LED left/right sweep animation
-│   ├── INDICATOR_GEN.c    # TX node: button ISRs + CAN TX + blink flags
+│   ├── INDICATOR_GEN.c    # TX node: EINT ISRs + CAN TX + blink flags
 │   ├── indicator.h        # shared interface (ISRs, LED steps, airbag)
-│   └── EXT_INT.c          # simpler EINT variant (single-press, no toggle)
 │
 ├── 🖥️ Main Node
 │   ├── MAIN_CAN_TX.c      # dashboard: CAN RX, LCD update, airbag, blink
@@ -126,45 +190,21 @@ vehicle-dashboard/
 │
 └── 🔧 Utilities
     ├── defines.h           # SETBIT / CLRBIT / READBIT / WRITEBYTE macros
-    ├── delay.c             # us / ms / s busy-wait delays @ 60 MHz
+    ├── delay.c             # us / ms / s busy-wait delays @ 60 MHz CCLK
     └── delay.h             # delay interface
 ```
 
 ---
 
-## 📡 CAN Message Protocol
-
-| CAN ID | Sender | Byte | Value | Meaning |
-|:---:|---|:---:|:---:|---|
-| `0x01` | Indicator Node | DATA1 | `0x01` | ◄ Left button pressed |
-| `0x01` | Indicator Node | DATA1 | `0x02` | ► Right button pressed |
-| `0x02` | Fuel Node | DATA2 | `0–100` | ⛽ Fuel level percentage |
-
----
-
-## 🔩 Hardware Used
-
-| Component | Part Number | Interface |
-|---|---|---|
-| Microcontroller | LPC2129 (ARM7TDMI-S) | — |
-| CAN Transceiver | MCP2551 / SN65HVD230 | P0.0 RD, P0.1 TD |
-| LCD Display | JHD 204A — 20×4 HD44780 | 8-bit parallel P0.10–P0.20 |
-| Accelerometer | MMA7660FC | I2C — P0.2 SCL, P0.3 SDA |
-| Fuel Sensor | FUEL GUAGE | AIN1 — P0.28 (ADC) |
-| Indicator LEDs | ×8 generic | P0.0–P0.7 |
-| Push buttons | ×2 momentary | EINT0 (P0.0), EINT2 (P0.7) |
-
----
-
-## ⚙️ Clock Configuration
+## ⚙️ Clock & Peripheral Configuration
 
 ```
 🔵 Crystal (FOSC)    =  12 MHz
 🟢 CPU clock (CCLK)  =  60 MHz    ← PLL × 5
 🟡 Peripheral (PCLK) =  15 MHz    ← ÷ 4
 📡 CAN bit rate      = 125 kbps   ← 15 MHz / (8 BRP × 15 quanta)
-🔗 I2C speed         = 100 kHz    ← standard mode
-⚡ ADC clock         =   3 MHz    ← ≤ 4.5 MHz max (datasheet)
+🔗 I2C speed         = 100 kHz    ← standard mode (MMA7660)
+⚡ ADC clock         =   3 MHz    ← ≤ 4.5 MHz datasheet limit
 ```
 
 ---
@@ -173,43 +213,36 @@ vehicle-dashboard/
 
 | File | Bug | Fix Applied |
 |---|---|---|
-| `MMA_7660.c` | `#include` statement **inside** a function body | Moved to top of file |
-| `INDICATOR.c` | Used undeclared variable `position` instead of `pos` | Unified to `pos` throughout |
-| `MAIN_CAN_TX.c` | Labels redrawn every loop — caused LCD flicker | Labels written **once** before `while(1)` |
-| `MAIN_CAN_TX.c` | Percentage digits shifted left/right (1→2→3 digits) | Fixed-width with space padding |
+| `MAIN_CAN_TX.c` | Static labels redrawn every loop — caused LCD **flicker** | Labels written **once** before `while(1)` |
+| `MAIN_CAN_TX.c` | Percentage digits shifted position for 1/2/3-digit values | Fixed-width right-aligned with space padding |
 
 ---
 
-## 🚀 How to Build
+## ✅ Expected Output
 
-**Toolchain:** Keil µVision 5 or ARM-GCC
-**Target device:** LPC2129 (ARM7TDMI-S — 64 kB RAM, 256 kB Flash)
+If the project is implemented correctly:
 
-```bash
-# ARM-GCC example
-arm-none-eabi-gcc -mcpu=arm7tdmi -mthumb-interwork \
-  -O1 -Wall \
-  CAN.c FUEL.c LCD.c I2C.c MMA_7660.c INDICATOR.c \
-  MAIN_CAN_TX.c MAIN_MMA_7660.c INDICATOR_GEN.c delay.c \
-  -o dashboard.elf
+- 🖥️ **LCD** shows live fuel %, blinking indicator arrows, and airbag status
+- 💡 **8 LEDs** on the Indicator Node sweep left or right based on button press
+- 💥 **Airbag message** appears on LCD when MMA7660 threshold is breached
+- 📡 **CAN bus** carries all data between the three independent MCU boards
 
-arm-none-eabi-objcopy -O binary dashboard.elf dashboard.bin
+---
+
+## 👨‍💻 Skills Demonstrated
+
+```
+Embedded C Programming    ████████████████████  Core language
+CAN Bus Protocol          ████████████████░░░░  Multi-node
+I2C Communication         ███████████████░░░░░  MMA7660 accelerometer
+ADC / Sensor Reading      ██████████████░░░░░░  Fuel gauge, 10-bit result
+External Interrupts (VIC) ████████████████░░░░  EINT0 / EINT2, ISR
+LCD Driver (HD44780)      ████████████████████  CGRAM, DDRAM, 8-bit mode
+Bit-level Register Access ████████████████████  Direct SFR writes
+Hardware Debugging        ███████████████░░░░░  LED indicators + UART
 ```
 
-> **Note:** A vendor startup file (`startup_LPC21xx.s`) is required for vector table and stack init. Not included — obtain from NXP or Keil device pack.
-
 ---
-
-## 📸 What I Learned
-
-- Designing a **multi-node embedded system** from scratch with no OS
-- Writing **bare-metal peripheral drivers** (CAN, I2C, ADC, LCD) by reading datasheets directly
-- Handling **hardware interrupts** (VIC, EINT) with real-time responsiveness
-- Debugging **register-level issues** on physical hardware with LEDs and an oscilloscope
-- Structuring **embedded C code** cleanly across multiple files for readability and maintainability
-
----
-
 ## 👨‍💻 Author
 
 Built as a major embedded systems project demonstrating end-to-end hardware bring-up, driver development, and system integration on ARM7 architecture.
