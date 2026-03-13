@@ -20,7 +20,7 @@ All of this is displayed in **real time** on a 20×4 LCD.
 
 - 📝 Knowledge of **Embedded-C programming**
 - 🔬 Thorough understanding of **LPC2129 Architecture** — GPIO, ADC, Interrupts, and CAN interface
-- 📡 Understanding of the **CAN protocol** (Controller Area Network, ISO 11898)
+- 📡 Understanding of the **CAN protocol** (Controller Area Network)
 
 ---
 
