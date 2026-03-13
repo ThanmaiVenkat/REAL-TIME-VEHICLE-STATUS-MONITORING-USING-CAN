@@ -31,7 +31,7 @@ All of this is displayed in **real time** on a 20×4 LCD.
                     │               🖥️  MAIN NODE              |
                     │                                          │
                     │  ┌──────────────────┐   ──────────►  LCD │
-                    │  │  ON-CHIP CAN     │   ──────────►  BUZZER/LED
+                    │  │  ON-CHIP CAN     │                    |
                     │  │  CONTROLLER      │   ◄────────►  MMA7660
                     │  │    LPC2129       │   ◄──  L.I SW (EINT0)
           MCP2551 ◄─┤  └──────────────────┘   ◄──  R.I SW (EINT2)
