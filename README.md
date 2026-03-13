@@ -244,9 +244,15 @@ Hardware Debugging        ███████████████░░░
 
 ---
 ## 👨‍💻 Author
+```
+D.Thanmai Venkat
+Embedded Systems Trainee | ECE
+
+Technical Skills:
+Embedded C, ARM7, CAN Protocol, I2C
 
 Built as a major embedded systems project demonstrating end-to-end hardware bring-up, driver development, and system integration on ARM7 architecture.
-
+```
 ---
 
 > ⭐ *If you found this project interesting, feel free to star the repo!*
